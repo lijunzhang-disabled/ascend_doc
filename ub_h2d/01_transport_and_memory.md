@@ -630,7 +630,9 @@ attributing a failure to the link:
 
 This is a code-reading guide, not a hardware test result. The remaining
 external questions are the concrete UMMU/UDMA translation and coherency rules,
-the complete device handlers, runtime buffer-reuse decisions, and measured
-resource costs. The repository's
+the complete device handlers, and measured resource costs. Selected runtime
+reuse and release decisions are traced in [06](06_acl_runtime_dispatch.md)
+for ordinary streams and [08](08_graph_and_software_sq_lifecycle.md) for
+software-SQ capture models. The repository's
 [UBDEVSHM dependency file](../../driver/cmake/third_party/ubdevshm.cmake#L12)
 also shows that part of the memory stack is supplied externally.

@@ -6,7 +6,8 @@ Source snapshot and evidence boundaries: [series scope](README.md#scope-and-evid
 This chapter expands P3 and P4: moving task descriptors and arguments from host
 memory into device memory. It also follows the host task-report return path
 far enough to separate submission, transport reporting, and task completion.
-The complete device scheduler and the runtime caller remain outside this trace.
+The complete device scheduler remains outside this trace. The upper runtime
+caller is connected in [document 06](06_acl_runtime_dispatch.md).
 
 ## 1. The submission contract
 
@@ -26,8 +27,9 @@ host code a way to order arguments before the task that consumes them.
 The device READ WQEs in [document 02](02_sync_and_async_memcpy.md) are a
 separate kind of work. Preparing an async memcpy WQE does not itself upload
 an SQ entry. Conversely, uploading a task descriptor does not mean the task
-has executed. A runtime caller may connect these stages, but that exact task
-format and launch sequence are not established by the host posting code alone.
+has executed. [Document 06](06_acl_runtime_dispatch.md) connects the ordinary
+runtime ASYNCDMA format and launch sequence; these are not established by the
+host posting code alone.
 
 Evidence: [argument posting](../../driver/src/ascend_hal/trs/core/urma/master/trs_master_urma.c#L1071),
 [task posting and return](../../driver/src/ascend_hal/trs/core/urma/master/trs_master_urma.c#L937),
@@ -369,8 +371,10 @@ not a global order across SQs or across the SVM copy-channel pool. The visible
 UB send and argument helpers do not wrap the argument-plus-task pair in one
 critical section. Their mutable PI, task tail, and scratch storage make the
 caller's ordering and serialization policy part of the interface contract.
-The exact runtime policy needs a caller trace; locks elsewhere in generic
-TRS paths do not by themselves establish it for these UB helpers.
+[Document 06](06_acl_runtime_dispatch.md#8-kernel-launch-connects-host-argument-staging-to-ordered-task-upload)
+shows that the selected ordinary Stars v2 kernel launch holds its stream
+lock across argument loading and task submission. Locks elsewhere in generic
+TRS paths do not by themselves establish this caller policy.
 
 Evidence: [argument post without doorbell](../../driver/src/ascend_hal/trs/core/urma/master/trs_master_urma.c#L1071),
 [task post with doorbell](../../driver/src/ascend_hal/trs/core/urma/master/trs_master_urma.c#L1002),
@@ -602,13 +606,13 @@ and report handling. Sharing one activation between arguments and task
 submission can reduce doorbell stores. These are source-derived cost
 categories; this analysis does not measure throughput, latency, or overlap.
 
-The next runtime/device trace should connect four pieces of evidence: which
-SQ mode and descriptor format the caller chooses; how it serializes argument
-posting and task submission; which report/event proves the relevant work is
-complete; and how that proof releases source buffers, device arguments, and
-async WQE objects. Host ordering flags describe the intended transfer order,
-while final device scheduling and report generation need the corresponding
-implementation or interface contract.
+[Document 06](06_acl_runtime_dispatch.md) connects the ordinary runtime SQE
+format, argument/task serialization, stream waiting, and resource recycling.
+[Document 08](08_graph_and_software_sq_lifecycle.md) traces the software-SQ
+capture-model lifecycle and compares the separate auto-split upload path.
+Host ordering flags describe the intended transfer order, while final device
+scheduling and report generation need the corresponding implementation or
+interface contract.
 
 The next chapter in the series is
 [04 — Queue/TDT and HDC](04_queue_and_hdc.md), comparing receiver-pull queue

@@ -1,8 +1,9 @@
 # Host-to-device paths over UB: summary and reading guide
 
-Analysis dates: 2026-09-14–2026-09-15. Source: the sibling `driver` checkout, commit
-`866e409`, clean when this analysis started. These notes describe the source
-snapshot, rather than measured behavior on a running device.
+Analysis dates: 2026-09-14–2026-09-22. Sources: the sibling `driver` checkout
+at `866e409` and, for documents 06–10, `runtime` at `216912472`, clean during
+their source traces. These notes describe source snapshots, rather than
+measured behavior on a running device.
 
 UB H2D consists of several paths with different transfer initiators, memory
 requirements, and completion models. H2D here means any host-to-device payload
@@ -11,9 +12,20 @@ service requests, register updates, shared-memory access, and boot delivery.
 
 ## Scope and evidence
 
-The focus is the Ascend 950/A5 UB implementation. The analysis covers both
-`driver/src/ascend_hal` and `driver/src/sdk_driver`. Many data submissions occur
-in the userspace HAL; resource setup and other traffic enter the kernel.
+The focus is the Ascend 950/A5 UB implementation. Documents 01–05 cover
+`driver/src/ascend_hal` and `driver/src/sdk_driver`. Document 06 connects
+selected ACL actions through the 950/v200 runtime to these paths. Many data
+submissions occur in the userspace HAL; resource setup and other traffic
+enter the kernel.
+
+Document 07 extends the analysis to mapped host-memory access over PCIe and
+UB, and evaluates KV-cache movement using an explicit bandwidth model.
+Document 08 follows the software-SQ capture-model lifecycle: recording,
+finalization, upload, replay, updates, resource reclamation, and destruction.
+Document 09 connects runtime 2D/batch progress to task submission and credit
+reclamation, including two batch bookkeeping concerns in this snapshot.
+Document 10 reviews those concerns and their cleanup paths, confirming three
+host-side correctness findings and specifying the required regression coverage.
 
 The visible tree includes host kernel code and shared/userspace implementations,
 including queue receiver logic. It does not contain a complete device-side
@@ -26,14 +38,17 @@ Source links assume this layout:
 ```text
 ascend_stack/
   driver/
+  runtime/
   ascend_doc/
     ub_h2d/
 ```
 
 Line anchors refer to this snapshot. Function names provide a second way to
-locate a reference if lines move. No runtime tracing or hardware tests were
-performed for this document set. The exact ACL/runtime dispatch into these HAL
-interfaces remains a separate follow-up.
+locate a reference if lines move. No live runtime tracing or hardware tests
+were performed. The runtime and driver checkouts have not been verified as
+an installed pair. Document 06 follows source dispatch for memcpy, selected
+kernel/argument launch, and queue-backed TDT send. Document 08 extends the
+graph branch; service-specific and device-execution boundaries remain.
 
 ## Reading order
 
@@ -44,8 +59,13 @@ interfaces remains a separate follow-up.
 | 03 | [TRS task and argument submission](03_trs_task_and_args_submission.md) | How do arguments, SQ entries, credits, tail notification, and the host JFS doorbell relate? How do transport reports differ from task CQ reports? |
 | 04 | [Queue/TDT and HDC](04_queue_and_hdc.md) | How do receiver-pull queue delivery and buffered HDC SEND differ? What do completion, backpressure, size limits, and buffer ownership mean for each? |
 | 05 | [Kernel control, register access, and boot](05_control_registers_and_boot.md) | How do DMS, ESCHED, SVM messages, UB admin requests, RAO, register updates, and image delivery cross UB? |
+| 06 | [ACL/runtime dispatch](06_acl_runtime_dispatch.md) | Which ACL actions select sync copy, async READ, argument WRITE, or queue pull? How do memory classification, chunking, task submission, stream completion, and recycling connect? |
+| 07 | [Mapped host memory and KV cache](07_host_memory_access_and_kv_cache.md) | How do kernel reads reach host memory over PCIe and UB? Which execution units are supported? When do bulk KV transfers, direct reads, or HBM staging make sense? |
+| 08 | [Graph and software-SQ lifecycle](08_graph_and_software_sq_lifecycle.md) | When are captured SQEs and WQEs uploaded? What does replay reuse? How do updates, completion, idle reclamation, and destruction differ? |
+| 09 | [Runtime 2D and batch bookkeeping](09_runtime_2d_and_batch_bookkeeping.md) | How do byte and entry cursors advance? When does runtime synchronize, return WQE credits, or retain graph resources? Which batch continuation cases need correctness review? |
+| 10 | [Batch correctness review](10_batch_correctness_review.md) | Which continuation concerns are confirmed by the source contracts? How does empty preparation affect CI ownership? What must a corrective patch and its tests establish? |
 
-Documents 01–04 have been expanded into deep dives. Document 01 covers
+Documents 01–05 have been expanded into deep dives. Document 01 covers
 transport setup, registration, mappings, and teardown. Document 02 traces
 synchronous buffer selection and completion, TRS async preparation modes,
 partial progress, and resource lifetime. Document 03 follows SQ resources,
@@ -53,8 +73,42 @@ argument/task ordering, doorbells, credits, task-report reception, and teardown.
 Document 04 traces queue metadata, receiver READs, enqueue acknowledgments,
 capacity retries, and cleanup, then HDC session buffers, SEND completion,
 receive reposting, and teardown. It also distinguishes the supported UB APIs
-and their size limits. Document 05 remains the initial source-based chapter;
-kernel control, register access, and boot come next.
+and their size limits. Document 05 traces kernel message setup, SEND/reply
+completion and cleanup, client service results, admin resource exchanges,
+kernel register and RAO transfers, and both boot-window handoff protocols.
+Document 06 connects the ordinary ACL/runtime memcpy, host-argument kernel
+launch, and queue-backed tensor-send paths. It distinguishes pageable async
+fallback, explicit staging, direct-WQE tasks, argument/task serialization,
+and stream completion from resource recycling.
+Document 07 separates registration from PCIe/UB data transactions, records
+the missing device-side mapping boundary, and compares bulk KV offload with
+repeated attention reads using clearly hypothetical bandwidth examples.
+Document 08 traces software-SQ capture through NOP padding, first execution,
+replay, task updates, idle resource reclamation, and ordinary destruction.
+It also distinguishes the separate auto-split upload path.
+Document 09 follows UB 2D/batch dispatch, pageable fallback, metadata
+compaction, partial preparation, task submission, and completion-driven
+CI return. It separates the connected source path from unresolved batch
+continuation behavior.
+Document 10 confirms the two progress-counter defects and identifies the
+related empty-preparation credit-ownership defect. It records remediation
+requirements and the gaps in existing mocked tests; runtime fixes remain open.
+
+## Follow-up status
+
+“Covered” below means the selected host source path is connected; it does
+not mean the device protocol has been validated on hardware.
+
+| Work item | Status |
+|---|---|
+| Ordinary ACL/runtime dispatch and resource lifetime | Covered for the selected paths in 06 |
+| PCIe/UB mapped host access and KV-cache tradeoffs | Covered in 07, with explicit device-side mapping and measurement gaps |
+| Software-SQ capture, finalization, first upload, replay, updates, idle reclamation, ordinary destruction | Covered in 08 for the 950/v200 UB capture-model path |
+| Auto-split variants and nested conditional/external-event edge cases | Main auto-split upload selector compared in 08; full lifecycle variants remain |
+| Runtime 2D/batch progress and completion bookkeeping | Source trace covered for the selected UB H2D/D2H paths in 09; HAL mechanics are in 02 |
+| Batch continuation correctness | Source review complete in 10: B1 per-call count comparison, B2 discarded byte-only continuation, and B3 empty-preparation CI ownership are confirmed host-code defects; fixes and behavioral validation remain |
+| Legacy TDT and service-specific HDC/device application behavior | Remaining source follow-up |
+| Device scheduling, coherency, failure quiescence, and measured performance | Require additional implementation/interface evidence or hardware validation |
 
 ## Path inventory
 
@@ -76,18 +130,24 @@ SEND or READ/WRITE implementation; they are not ten independent physical links.
 
 Task-storage helpers can reuse other rows: the conditional high-performance
 `halStreamTaskFill` path copies through P1, while async SQE updates use P2.
-Document 03 distinguishes these from normal P3 task submission.
+Document 03 distinguishes these from normal P3 task submission. Document 08
+connects their use in captured task upload, replay, and kernel-SQE updates.
+Document 09 connects P2's 2D/batch partial preparation to runtime task cleanup
+and the HAL's caller-supplied CI updates.
 
 Shared-memory access is an additional mode spanning the inventory: UBMM/UBMEM
 can expose host pages through a UB address mapping, while eligible mappings can
 support CPU load/store access. Creating a mapping does not itself copy a payload.
-Document 01 separates this mode from URMA data submissions.
+Document 01 separates this mode from URMA data submissions. Document 07 covers
+kernel-originated mapped reads and their PCIe/UB capability restrictions.
 
 ## Architecture at a glance
 
 ```mermaid
 flowchart TD
-    A[Host application / caller] --> H[Userspace HAL]
+    A[Host application / caller] --> R0[ACL and runtime dispatch]
+    R0 --> H[Userspace HAL]
+    A --> H
     H --> S[SVM synchronous copy]
     H --> T[TRS task and argument upload]
     H --> Q[Queue and HDC]
@@ -146,8 +206,10 @@ Starting evidence: [SVM UB copy operations](../../driver/src/ascend_hal/svm/v3/o
 - PCIe-specific DMA descriptor construction, `asdrv_queue` payload enqueue,
   and VNIC must not be assumed active merely because their modules exist in a
   UB-capable build. Relevant selectors are recorded in the detail documents.
-- Exact memory-coherency guarantees, task completion wiring, performance, and
-  device recovery behavior require external implementation or hardware evidence.
+- Runtime stream-wait and task-recycling entry points are connected in document
+  06; graph completion references and resource ownership are traced in 08.
+  Exact device report semantics, memory-coherency guarantees, performance,
+  and recovery quiescence require external implementation or hardware evidence.
 
 ## Related documents
 

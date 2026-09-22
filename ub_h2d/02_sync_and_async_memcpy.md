@@ -5,8 +5,9 @@
 Source snapshot and evidence boundaries: [series scope](README.md#scope-and-evidence).
 This chapter expands P1 and P2 from API entry through buffer selection, work
 preparation, completion, and cleanup. The scope is the host driver/HAL source;
-execution inside device firmware and the exact ACL/runtime caller remain
-outside this trace. Task-argument uploads use P4 and are covered in document 03.
+execution inside device firmware remains outside this trace. The upper
+ACL/runtime caller is connected in [document 06](06_acl_runtime_dispatch.md).
+Task-argument uploads use P4 and are covered in document 03.
 
 ## 1. The decisive difference is the transfer initiator
 
@@ -356,8 +357,10 @@ There is an important size distinction: this direct-create helper packs
 **one WQE using the requested normal-copy length**. It does not contain the
 256 MiB WQE-generation loop used by the separate converter below. Its shared
 credit calculation uses 256 MiB units, but that does not prove that direct
-create itself splits a large request. Effective runtime sizing and hardware
-constraints need confirmation at the caller/device boundary.
+create itself splits a large request. [Document 06](06_acl_runtime_dispatch.md#5-eligible-h2d-async-copies-become-asyncdma-plus-a-direct-wqe)
+confirms that the ordinary UB H2D runtime caller divides requests into at
+most 256 MiB chunks before direct creation. Hardware constraints beyond
+this source sizing rule still need device evidence.
 
 Evidence: [mode and tracking-object layout](../../driver/src/ascend_hal/trs/core/urma/trs_urma.h#L79),
 [direct-mode predicate](../../driver/src/ascend_hal/trs/core/urma/trs_urma.h#L215),
@@ -399,6 +402,9 @@ continuation must account for the completed prefix of the input arrays.
 A 2D/batch call can return success with **zero new work** when credit does not
 permit progress. Success alone does not mean the full input was prepared.
 These fields describe preparation, not bytes already copied by the device.
+[Document 09](09_runtime_2d_and_batch_bookkeeping.md) traces how runtime
+consumes these fields and records the batch continuation concerns found
+when connecting the two layers.
 
 Evidence: [depth constants and credit formula](../../driver/src/ascend_hal/trs/core/urma/trs_urma.h#L189),
 [credit and progress arithmetic](../../driver/src/ascend_hal/trs/core/urma/master/trs_master_async.c#L545),
@@ -545,15 +551,18 @@ an automatic pageable-host registration facility.
 The 2D/batch destroy calls validate the CI domain and assign the supplied CI;
 they neither poll the device nor wait for the corresponding work. The caller
 must associate prepared portions and submitted tasks with observed completion
-before advancing that state. Likewise, standalone jetty query returns identity,
+before advancing that state. [Document 09](09_runtime_2d_and_batch_bookkeeping.md#6-completion-returns-credits-through-task-cleanup)
+connects ordinary runtime task cleanup to these CI updates and distinguishes
+the software-SQ capture path. Likewise, standalone jetty query returns identity,
 and task-sink SQ jetty-info query returns preparation metadata/NOP information;
 neither query supplies a general payload-completion fence.
 
 On synchronous success, the transfer wait establishes the success boundary
 for releasing the temporary source. Async preparation success establishes
-only that work was prepared. Exact runtime notification, graph/task-sink
-reuse, and when caller-owned storage becomes reusable require the caller and
-device-execution trace; cleanup behavior alone cannot supply those answers.
+only that work was prepared. [Document 06](06_acl_runtime_dispatch.md#6-stream-completion-and-resource-recycling-are-separate-stages)
+connects ordinary runtime task submission, stream waiting, and WQE cleanup.
+Graph/task-sink reuse and device-execution guarantees require their own
+trace; cleanup behavior alone cannot supply those answers.
 
 Evidence: [public cleanup aliases](../../driver/src/ascend_hal/trs/core/trs_interface.c#L565),
 [tracking layout](../../driver/src/ascend_hal/trs/core/urma/trs_urma.h#L79),
@@ -587,8 +596,14 @@ latency crossover for staging, or guarantee of copy/compute overlap.
 
 [Document 03](03_trs_task_and_args_submission.md) is the next deep dive: it
 connects task and argument submission to SQ entries, queue-tail updates, the
-host JFS doorbell, and completion handling. A subsequent trace above the HAL
-should establish which async family runtime selects, how it sizes direct
-requests and handles partial progress, what launches the device READ, and what
-completion permits payload/WQE reuse. Device-side execution details still need
-an implementation or interface source beyond this host snapshot.
+host JFS doorbell, and completion handling. [Document 06](06_acl_runtime_dispatch.md)
+then identifies ordinary runtime async selection, direct-request sizing,
+ASYNCDMA submission, and stream/WQE cleanup boundaries.
+[Document 08](08_graph_and_software_sq_lifecycle.md) follows software-SQ
+capture, WQE upload, replay, updates, and resource lifetime.
+[Document 09](09_runtime_2d_and_batch_bookkeeping.md) connects runtime
+2D/batch progress, submission, and cleanup, with two batch bookkeeping
+concerns subsequently confirmed in [10](10_batch_correctness_review.md),
+alongside an empty-preparation CI-ownership defect. Fixes remain open.
+Device-side execution details still
+need an implementation or interface source beyond this host snapshot.

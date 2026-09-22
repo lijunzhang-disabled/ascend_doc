@@ -680,10 +680,10 @@ across calls, host staging copies, block availability, SEND completion, and
 receiver copying/reposting. These are qualitative source-derived categories;
 no bandwidth, latency, or copy-overlap measurements were performed.
 
-A subsequent runtime/TDT trace should establish the exact caller API, memory
-classification, ownership rules, event subscription policy, and application
-completion used to recycle buffers. For HDC services it should establish how
-larger logical messages are framed into normal sends and when the peer consumes
-them. The remaining series deep dive is
+[Document 06](06_acl_runtime_dispatch.md#9-queue-backed-tdt-send-reaches-the-receiver-pull-path)
+connects queue-backed `acltdtSendTensor`, control/data vector construction,
+optional runtime gathering, and the HAL call. The legacy TDT interface,
+application event policy and consumption, and HDC service framing remain
+follow-ups. The next chapter is
 [05 — Kernel control, register access, and boot](05_control_registers_and_boot.md),
 which follows the control traffic supporting these payload paths.

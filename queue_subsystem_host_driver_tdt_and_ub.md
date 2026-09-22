@@ -4,6 +4,10 @@ Grounded in the tree at `~/ascend_stack` (driver + runtime, 910B/950 era). Analy
 
 **Provenance caveat.** This repo contains the **host-side kernel driver** and the **userspace HAL** only. The device-side driver is closed source. Several conclusions below are inferred from a shared UAPI header whose other half we cannot read; those are marked.
 
+Companion document: [`buff_subsystem_xsmem_shared_memory.md`](./buff_subsystem_xsmem_shared_memory.md) — the shared-memory side of the same feature. buff supplies the `Mbuf` that the local-queue path passes by pointer; this document covers the transport that the remote path needs because buff cannot cross PCIe.
+
+Also in this set: [`dms_subsystem_urd_dispatch_and_control_plane.md`](./dms_subsystem_urd_dispatch_and_control_plane.md) — the control plane, where DMS's design is contrasted with this module's.
+
 ---
 
 ## 1. Two different things are called "queue"
