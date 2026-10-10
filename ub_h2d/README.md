@@ -1,9 +1,13 @@
 # Host-to-device paths over UB: summary and reading guide
 
-Analysis dates: 2026-09-14–2026-09-22. Sources: the sibling `driver` checkout
+Analysis dates: 2026-09-14–2026-10-10. Sources: the sibling `driver` checkout
 at `866e409` and, for documents 06–10, `runtime` at `216912472`, clean during
 their source traces. These notes describe source snapshots, rather than
 measured behavior on a running device.
+
+Document 11 adds the HCCL/HCOMM collective-communication trace, using `hccl`
+at `e6c81224` and `hcomm` at `f9f91c084`, alongside the runtime/driver snapshots
+above. These checkouts have not been validated as one installed stack.
 
 UB H2D consists of several paths with different transfer initiators, memory
 requirements, and completion models. H2D here means any host-to-device payload
@@ -26,6 +30,9 @@ Document 09 connects runtime 2D/batch progress to task submission and credit
 reclamation, including two batch bookkeeping concerns in this snapshot.
 Document 10 reviews those concerns and their cleanup paths, confirming three
 host-side correctness findings and specifying the required regression coverage.
+Document 11 inventories collective setup, context/argument uploads, AICPU/AIV
+launches, and CCU instruction installation and launch. It separates H2D
+control/resource traffic from the collective's NPU-to-NPU payload traffic.
 
 The visible tree includes host kernel code and shared/userspace implementations,
 including queue receiver logic. It does not contain a complete device-side
@@ -64,6 +71,7 @@ graph branch; service-specific and device-execution boundaries remain.
 | 08 | [Graph and software-SQ lifecycle](08_graph_and_software_sq_lifecycle.md) | When are captured SQEs and WQEs uploaded? What does replay reuse? How do updates, completion, idle reclamation, and destruction differ? |
 | 09 | [Runtime 2D and batch bookkeeping](09_runtime_2d_and_batch_bookkeeping.md) | How do byte and entry cursors advance? When does runtime synchronize, return WQE credits, or retain graph resources? Which batch continuation cases need correctness review? |
 | 10 | [Batch correctness review](10_batch_correctness_review.md) | Which continuation concerns are confirmed by the source contracts? How does empty preparation affect CI ownership? What must a corrective patch and its tests establish? |
+| 11 | [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md) | What crosses host UB during a collective? How do AICPU/AIV resources and arguments, CCU instructions/TLV requests, and SQ submission differ from D2D payload movement? |
 
 Documents 01–05 have been expanded into deep dives. Document 01 covers
 transport setup, registration, mappings, and teardown. Document 02 traces
@@ -108,6 +116,7 @@ not mean the device protocol has been validated on hardware.
 | Runtime 2D/batch progress and completion bookkeeping | Source trace covered for the selected UB H2D/D2H paths in 09; HAL mechanics are in 02 |
 | Batch continuation correctness | Source review complete in 10: B1 per-call count comparison, B2 discarded byte-only continuation, and B3 empty-preparation CI ownership are confirmed host-code defects; fixes and behavioral validation remain |
 | Legacy TDT and service-specific HDC/device application behavior | Remaining source follow-up |
+| HCCL/HCOMM collective H2D traffic | Selected AICPU/AIV/CCU resource, argument, instruction, and launch paths covered in 11; full bootstrap, graph/MC2 lifecycle, external CCU backend, and measurements remain |
 | Device scheduling, coherency, failure quiescence, and measured performance | Require additional implementation/interface evidence or hardware validation |
 
 ## Path inventory

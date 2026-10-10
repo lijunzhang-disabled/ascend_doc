@@ -1,6 +1,6 @@
 # 10 — Batch continuation correctness review
 
-[Summary](README.md) · Previous: [Runtime 2D and batch bookkeeping](09_runtime_2d_and_batch_bookkeeping.md)
+[Summary](README.md) · Previous: [Runtime 2D and batch bookkeeping](09_runtime_2d_and_batch_bookkeeping.md) · Next: [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md)
 
 Review date: 2026-09-22. Source snapshots: `runtime` at `216912472` and
 `driver` at `866e409`. Scope: the UB H2D/D2H batch implementation selected
