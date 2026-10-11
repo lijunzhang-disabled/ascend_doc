@@ -16,6 +16,11 @@ uploads, CCU instruction installation, and launch traffic. It distinguishes
 these H2D transfers from NPU-to-NPU collective tensor movement and records its
 own 2026-10-10 HCCL/HCOMM source snapshots.
 
+The [D2rH/rH2D remote-memory chapter](ub_h2d/12_remote_host_memory_d2rh_rh2d.md)
+covers NPU memory transfers to/from another server's host RAM through HIXL,
+including Host UB endpoints, mapped host memory, and local launch/completion
+traffic. It keeps those bulk remote transfers separate from local H2D/D2H.
+
 This table combines the application categories—weights, inference requests, operator submission, and results—with the control, register, completion, and boot traffic in the supplied PCIe table. Several rows reuse the same transport mechanism. Application names identify what the bytes represent; the selected API, memory properties, stream mode, and build determine how they move. The final rows describe supporting driver traffic rather than user tensor payloads.
 
 For ordinary copies, **host WRITE carries H2D data; host READ carries D2H data**. Eligible device-executed async copies use **device READ for H2D and device WRITE for D2H**. Pageable-memory fallback can instead perform a synchronous copy, so an async API name alone does not identify the initiator. [Runtime selectors][acl-runtime-analysis], [sync opcode][sync-op], [async opcode][async-op].

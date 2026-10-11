@@ -1,13 +1,18 @@
 # 11 — HCCL/HCOMM collective communication: host–device traffic over UB
 
 [Summary](README.md) · Previous: [Batch correctness review](10_batch_correctness_review.md)
+· Next: [D2rH/rH2D remote host-memory traffic](12_remote_host_memory_d2rh_rh2d.md)
 
-Analysis date: 2026-10-10. Source snapshots: `hccl` at `e6c81224`,
+Analysis date: 2026-10-10; source review: 2026-10-11. Source snapshots: `hccl` at `e6c81224`,
 `hcomm` at `f9f91c084`, `runtime` at `216912472`, and `driver` at `866e409`.
 The HCCL/HCOMM worktrees were clean when inspected. These independently
 checked-out versions have not been validated as an installed software stack.
 This is a source analysis; no collective workloads or hardware measurements
 were run.
+
+The review confirmed the main execution and upload paths, added the internal
+D2H metadata copies, clarified submission versus completion and CCU mode
+names, and added the cross-server memory-traffic distinction in section 8.
 
 ## 1. What counts as H2D traffic
 
@@ -67,6 +72,7 @@ cache entry. It is not a guarantee that every allocation occurs during
 | Channel resources and initialization parameters | `AicpuTsUrmaChannel::H2DResPack`; `ChannelProcess::LaunchChannelKernelCommon` → `hrtMemSyncCopy` and an initialization kernel | **URMA — host WRITE** for serialized resources; runtime argument/SQ submission for the init kernel | Local/remote memory and notify metadata, connection information, size arrays, and initialization descriptors. These describe buffers; they do not upload the buffers' tensor contents. |
 | AICPU collective launch arguments | `AicpuKernelLaunch` → `aclrtKernelArgsAppend` / `aclrtLaunchKernelWithConfig` → runtime argument loader | Ordinary stream: **URMA — host argument WRITE**, then task/tail WRITE | `sizeof(OpParam) + varMemSize` is appended at HCCL's API boundary. It includes input/output addresses and operation metadata. Runtime framing/alignment adds overhead. |
 | AIV peer-buffer tables and channel entities | `HcclAllocAlgResourceAiv` → `haclrtMemcpy(H2D)`; `AivUrmaChannel` entity copies → `HrtMemcpy` | **URMA — host WRITE**, through synchronous runtime copies | Remote buffer/flag addresses and, for network channels, registered buffer/notify/connection metadata. Setup/update traffic; not the peer tensor payload. |
+| Internal channel-handle and AIV address-table readback | `ChannelProcess::LaunchChannelKernelCommon` → `hrtMemSyncCopy(D2H)`; `HcclAllocAlgResourceAiv` → `haclrtMemcpy(D2H)` | **URMA — host READ**, through synchronous runtime copies | Channel handles are returned after initialization when `!isCtxMode`; an existing AIV address table is read before selected updates. HCCL/HCOMM can initiate D2H metadata traffic without an application result copy. |
 | AIV collective launch arguments | AIV `ExecuteKernelLaunchInner` → `aclrtLaunchKernelWithHostArgs` | Ordinary stream: **URMA — host argument WRITE**, then task/tail WRITE | Vector kernel parameters; AIV executes the selected communication algorithm on device. |
 | Compiled CCU instructions | `CcuKernelMgr::LoadInstruction` → `hrtMemcpy(H2D)` | **URMA — host WRITE** to device staging memory | Copies `instruction_count × sizeof(CcuInstr)` bytes. Instruction installation is a separate control request in the next row. Reusable kernels avoid recompiling/reinstalling on every launch. |
 | CCU resource/configuration and instruction-install requests | `HccpRaTlvCcuCustomChannel` → `RaTlvRequest` → HDC → `halHdcSend` / receive | **HDC over URMA — SEND/RECV** on the selected UB HDC path | TLV service messages, e.g. `CCU_U_OP_SET_INSTRUCTION`, carry a device staging address, length, and instruction offset. They are control messages, not the collective tensor payload. |
@@ -137,6 +143,12 @@ The serialized resource blob is not the tensor data referred to by its
 addresses. The caller attaches the resulting device context pointer to
 `OpParam.resCtx`. Resource reuse is checked before allocation and copying.
 
+Concrete fields include algorithm hierarchy/topology, the `cclMem` scratch
+buffer descriptor, communication-thread and channel handles, Notify counts,
+and timeouts. These are serialized resource descriptions consumed by the
+AICPU kernel, rather than executable CCU instructions or the contents of the
+scratch buffer. See [resource fields and serialization](../../hccl/src/ops/op_common/inc/alg_param.h#L534).
+
 Evidence: [serialize and upload](../../hccl/src/ops/op_common/op_common.cc#L1700),
 [context-copy entry](../../hccl/src/ops/op_common/op_common.cc#L1738),
 [HCOMM context copy](../../hcomm/src/base_comm/primitives/api_c_adpt/hcomm_engine_ctx_c_adpt.cc#L55),
@@ -169,6 +181,11 @@ Evidence: [device-used UB connection](../../hcomm/src/base_comm/resources/endpoi
 [resource upload](../../hcomm/src/base_comm/resources/endpoint_pairs/channels/channel_process.cc#L679),
 and [initialization kernel](../../hcomm/src/base_comm/resources/endpoint_pairs/channels/channel_process.cc#L565).
 
+Initialization can also copy metadata **D2H**. After the initialization kernel,
+`LaunchChannelKernelCommon` copies `listNum × sizeof(ChannelHandle)` bytes
+from the device channel list to host when `!isCtxMode`. The preallocated-context
+mode skips this particular readback. See [conditional handle readback](../../hcomm/src/base_comm/resources/endpoint_pairs/channels/channel_process.cc#L776).
+
 ### 4.3 Per-call arguments use runtime's UB argument path
 
 ```text
@@ -197,7 +214,7 @@ Evidence: [HCCL launch](../../hccl/src/ops/op_common/op_common.cc#L1168),
 [runtime CPU dispatch](../../runtime/src/runtime/api/impl/api_impl_david.cc#L177),
 [AICPU task construction](../../runtime/src/runtime/core/src/launch/aicpu_starsv2.cc#L330),
 [CPU argument overload](../../runtime/src/runtime/core/src/kernel/arg_loader/stars_arg_manager.cc#L187),
-and [UB copy selector](../../runtime/src/runtime/core/src/kernel/arg_loader/arg_manage_ub.cc#L82).
+and [UB copy selector](../../runtime/src/runtime/core/src/kernel/arg_loader/arg_manage_ub.cc#L84).
 
 `OpParam` contains addresses and operation metadata. Variable-length
 collectives can add rank-dependent metadata: the inspected AllGatherV path
@@ -291,8 +308,11 @@ Evidence: [HCCL CCU launch example](../../hccl/src/ops/all_reduce/algorithm/temp
 [runtime task submission](../../runtime/src/runtime/feature/ccu/ccu_stream.cc#L18),
 [two-SQE construction](../../runtime/src/runtime/feature/ccu/ccu_sqe.cc#L20),
 and [collective WRITE/reduction example](../../hccl/src/ops/all_reduce/algorithm/template/ccu/kernel/ccu_kernel_all_reduce_nhr1d_mem2mem.cc#L115).
-CCU scheduling and memory-to-memory modes have different internals; this
-trace does not identify every CCU instruction with one fixed Jetty opcode.
+The configured modes are `CCU_SCHED` and `CCU_MS`: the former schedules UB
+WQEs without `CcuBuffer` staging; the latter uses the small on-chip
+`CcuBuffer` to reduce memory traffic. Their support constraints differ.
+See [CCU mode definitions](../../hccl/docs/zh/user_guide/hccl_env/HCCL_OP_EXPANSION_MODE.md#L40).
+This trace does not identify every CCU instruction with one fixed Jetty opcode.
 
 ## 6. AIV: resource tables plus a vector-kernel launch
 
@@ -302,6 +322,12 @@ also builds a device channel entity containing local/remote registered
 buffers, notifies, and connection metadata. Its array copies call `HrtMemcpy`.
 The addresses copied into these structures refer to payload buffers; copying
 an address does not copy the referenced tensor.
+
+When the AIV communication-info buffer already exists, the inspected resource
+update path first reads its two address arrays **D2H**, each with
+`MAX_RANK_SIZE × sizeof(void*)` bytes, so existing entries can be preserved
+when peers change. This is conditional resource-update traffic, not a mandatory
+readback on every cached AIV launch. See [existing-table readback](../../hccl/src/ops/op_common/op_common.cc#L3232).
 
 The algorithm eventually launches its vector kernel through
 `ExecuteKernelLaunchInner → aclrtLaunchKernelWithHostArgs`, connecting to
@@ -329,6 +355,7 @@ See [channel selection](../../hcomm/src/base_comm/resources/endpoint_pairs/chann
 | Reused AIV execution | Kernel argument/task submission or the selected cache/replay mechanism; existing resource tables reused unless updates are required |
 | Tensor initially in host RAM | Additional bulk H2D copy before the collective |
 | Result needed by host CPU | Additional D2H payload copy after the required stream dependency/completion |
+| Channel initialization or selected AIV resource updates | Conditional D2H handle/address-table copies initiated inside HCOMM/HCCL |
 | New topology, channels, algorithm, or graph/resource lifecycle | Can reintroduce resource copies and initialization; steady-state assumptions must be revisited |
 
 The source has several different caches: resource-context reuse, AICPU
@@ -341,7 +368,9 @@ task-cache execution has its own path inside the launched kernel.
 There are also several different completion boundaries:
 
 1. Successful context memcpy establishes the copied resource bytes are ready.
-2. Successful host SQ transport submission publishes work to the device.
+2. Successful host SQ submission posts transport work; it is not proof that
+   the kernel or collective has completed. The inspected driver posts WRs
+   and rings the local JFS doorbell without waiting for task execution.
 3. Device UB transfer completion/notify establishes the algorithm's required
    communication ordering.
 4. Runtime stream completion establishes completion of the scheduled work
@@ -356,6 +385,7 @@ completion of the entire collective have different meanings.
 See [host ordering](../../hccl/src/ops/op_common/op_common.cc#L1129),
 [device notification](../../hccl/src/ops/op_common/algorithm/template/aicpu/kernel_launch.cc#L811),
 and [example synchronization](../../hccl/examples/02_collectives/01_allreduce/main.cc#L82).
+See also [host transport posting](../../driver/src/ascend_hal/trs/core/urma/master/trs_master_urma.c#L912).
 
 For traffic accounting, separate:
 
@@ -364,6 +394,10 @@ H2D bytes = optional application input upload
           + resource / instruction uploads when created or updated
           + per-launch arguments and task/dependency descriptions
           + host-to-device service requests
+
+D2H bytes = optional application result download
+          + conditional resource metadata readback
+          + device-to-host service replies and task reports
 
 D2D collective bytes = algorithm-dependent peer tensor transfers
                     + peer synchronization/control traffic
@@ -374,7 +408,95 @@ depend on algorithm, rank count, transfer chunking, cache state, stream mode,
 protocol, and control framing. HCCL's count/datatype describe tensor size;
 they are not an H2D traffic counter.
 
-## 8. Scope and remaining work
+These are content categories: count actual transfers once. For example,
+CCU launch arguments embedded in SQEs must not be counted again as a separate
+argument upload. Protocol headers, acknowledgements, retries, and other wire
+overhead are outside this content-level accounting. Device-generated SQEs/WQEs
+are not host uploads.
+
+## 8. Separate servers / OS domains and remote host memory
+
+The standalone [D2rH/rH2D document](12_remote_host_memory_d2rh_rh2d.md)
+expands this distinction into endpoint arrangements, registration, HIXL
+execution, completion, and a KV-cache traffic inventory.
+
+Memory direction and server/OS placement are different dimensions. For two
+8-NPU servers A and B, classify traffic by the memory it actually accesses:
+
+| Path | Classification | Relationship to this collective trace |
+|---|---|---|
+| Host A ↔ NPU A | Local H2D/D2H | Resource, launch, service, and completion paths above |
+| Host B ↔ NPU B | Local H2D/D2H | The corresponding work performed by ranks on server B |
+| NPU A memory ↔ NPU B memory | Cross-server D2D | Normal device-buffer collective payload |
+| NPU A memory → Host B RAM | Remote-host transfer, often written D2rH | Explicit remote-memory use, e.g. KV-cache offload |
+| Host B RAM → NPU A memory | Remote-host transfer, often written rH2D | Explicit remote-memory use, e.g. restoring offloaded KV blocks |
+
+For the ordinary device-buffer collective traced here, each rank's host
+submits work to its local device; the bulk inter-server collective traffic
+is D2D. Neither crossing an OS boundary nor receiving a host API call makes
+the tensor payload H2D/D2H. Inter-rank control exchanges must be classified
+by their actual endpoints; the bootstrap inventory remains incomplete.
+
+Remote-host transfers nevertheless exist in the wider CANN communication
+stack. For this distinction, the additional source inspected was HIXL commit
+`49bd2a256b728544c1e12df555c545670f9ab51a` from the earlier HIXL checkout. It is
+separate evidence, not a claim that an ordinary HCCL AllReduce automatically
+selects a remote-host buffer:
+
+- `EndpointMatcher::ParseCommType` explicitly distinguishes UB device/device,
+  device/host, host/device, and host/host endpoint pairs.
+- `UbClientHandler::ClassifyTransfers` classifies local/remote registered
+  memory types into `COMM_TYPE_UB_D2D`, `UB_D2H`, `UB_H2D`, and `UB_H2H`.
+- The D2rH example builds descriptors whose local address is a device buffer
+  and remote address is the peer's host buffer, then calls
+  `TransferAsync(..., WRITE, ...)`. That example itself uses two engines in
+  one process; the benchmark separately provides dual-machine execution
+  and the D2rH/rH2D directions.
+
+Evidence: [endpoint classification](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/src/hixl/engine/endpoint_matcher.cc#L81),
+[registered-memory classification](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/src/hixl/engine/ub_client_handler.cc#L687),
+[D2rH descriptors and WRITE](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/examples/cpp/hixl_example_d2rh.cpp#L239),
+and [benchmark directions and dual-machine options](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/benchmarks/README_en.md#L168).
+
+On the inspected 950 UB implementation, two relevant arrangements are:
+
+1. **Device and Host UB endpoints:** pure URMA paths can select a device/host
+   pair and registered memory. A device-side WRITE can target remote host
+   RAM; a device-side READ can fetch remote host bytes. Data direction and
+   operation initiator are separate: a remote host can instead initiate a
+   READ to pull the same device data.
+2. **Device endpoints with mapped host memory:** HIXL can map host RAM into
+   a device-visible address using `aclrtHostRegister(...,
+   ACL_HOST_REGISTER_MAPPED, ...)`, register that mapping for communication,
+   and use a device communication endpoint. The backing bytes remain in host
+   RAM even though the registered address is described as device memory.
+
+See [UB endpoint configuration](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/docs/zh/api/cpp/HIXL-interface.md#L312),
+[mapping selection and registration](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/src/hixl/cs/endpoint.cc#L221),
+and [host registration](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/src/hixl/cs/host_register_proxy.cc#L118).
+HCOMM's [memory-registration contract](../../hcomm/docs/zh/api_ref/comm_opdev/control_plane_api/basic_resource_mgmt/HcommMemReg.md#L48)
+also lists Host UB_CTP endpoints on 950. The published
+[HIXL initialization reference](https://www.hiascend.com/doc_center/source/en/CANNCommunityEdition/910/commlib/hixlug/llmcrv2_42_25.html)
+shows `ub_ctp` with Host placement; exact options/defaults differ by release.
+
+An OS boundary does not establish a UB network boundary. HIXL tests
+`net_instance_id` to distinguish network instances, and its same-instance
+and cross-instance protocol-selection rules differ. Two separate servers
+can be in one UB network instance. Across instances, the inspected selector
+considers UBoE, UB_RTP, and RoCE alternatives instead of assuming the same
+UB_CTP path. See [selection rules](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/src/hixl/engine/endpoint_matcher.cc#L36)
+and [instance predicate](https://gitcode.com/cann/hixl/blob/49bd2a256b728544c1e12df555c545670f9ab51a/src/hixl/engine/endpoint_matcher.cc#L128).
+
+Consequently, D2rH/rH2D requires a supported and reachable endpoint/memory
+combination, registration/export/import, and application ordering. A pointer
+value from another OS alone is insufficient, and ordinary local
+`aclrtMemcpy` does not discover remote server memory. The source demonstrates
+the remote-memory mechanisms; it does not establish which route or bandwidth
+is available on an unspecified pair of 8-card servers. A mapped-host path
+can also contain both an inter-NPU segment and a local host-memory segment;
+end-to-end memory direction and per-link traffic should be counted separately.
+
+## 9. Scope and remaining work
 
 The connected paths are the current split-repository AllReduce dispatch,
 AICPU algorithm/channel context uploads, AICPU and AIV argument launches,

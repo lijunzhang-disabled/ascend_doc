@@ -1,6 +1,6 @@
 # Host-to-device paths over UB: summary and reading guide
 
-Analysis dates: 2026-09-14–2026-10-10. Sources: the sibling `driver` checkout
+Analysis dates: 2026-09-14–2026-10-11. Sources: the sibling `driver` checkout
 at `866e409` and, for documents 06–10, `runtime` at `216912472`, clean during
 their source traces. These notes describe source snapshots, rather than
 measured behavior on a running device.
@@ -33,6 +33,11 @@ host-side correctness findings and specifying the required regression coverage.
 Document 11 inventories collective setup, context/argument uploads, AICPU/AIV
 launches, and CCU instruction installation and launch. It separates H2D
 control/resource traffic from the collective's NPU-to-NPU payload traffic.
+Its source review adds internal D2H metadata copies and distinguishes normal
+cross-server D2D collectives from explicit HIXL remote-host-memory transfers.
+Document 12 follows D2rH/rH2D using HIXL at `49bd2a256b728544c1e12df555c545670f9ab51a`:
+Host UB endpoints, mapped host memory, device execution, and completion traffic.
+Its HIXL references use pinned upstream links rather than a sibling checkout.
 
 The visible tree includes host kernel code and shared/userspace implementations,
 including queue receiver logic. It does not contain a complete device-side
@@ -72,6 +77,7 @@ graph branch; service-specific and device-execution boundaries remain.
 | 09 | [Runtime 2D and batch bookkeeping](09_runtime_2d_and_batch_bookkeeping.md) | How do byte and entry cursors advance? When does runtime synchronize, return WQE credits, or retain graph resources? Which batch continuation cases need correctness review? |
 | 10 | [Batch correctness review](10_batch_correctness_review.md) | Which continuation concerns are confirmed by the source contracts? How does empty preparation affect CI ownership? What must a corrective patch and its tests establish? |
 | 11 | [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md) | What crosses host UB during a collective? How do AICPU/AIV resources and arguments, CCU instructions/TLV requests, and SQ submission differ from D2D payload movement? |
+| 12 | [D2rH/rH2D remote host-memory traffic](12_remote_host_memory_d2rh_rh2d.md) | How can an NPU offload to or restore from another server's RAM? How do endpoint selection, registration/mapping, local launch traffic, and completion differ from bulk payload? |
 
 Documents 01–05 have been expanded into deep dives. Document 01 covers
 transport setup, registration, mappings, and teardown. Document 02 traces
@@ -117,6 +123,7 @@ not mean the device protocol has been validated on hardware.
 | Batch continuation correctness | Source review complete in 10: B1 per-call count comparison, B2 discarded byte-only continuation, and B3 empty-preparation CI ownership are confirmed host-code defects; fixes and behavioral validation remain |
 | Legacy TDT and service-specific HDC/device application behavior | Remaining source follow-up |
 | HCCL/HCOMM collective H2D traffic | Selected AICPU/AIV/CCU resource, argument, instruction, and launch paths covered in 11; full bootstrap, graph/MC2 lifecycle, external CCU backend, and measurements remain |
+| D2rH/rH2D across servers / OS domains | Selected HIXL UB endpoint and mapped-host arrangements, device batch execution, and local completion traffic covered in 12; actual route, provider details, and hardware measurements remain |
 | Device scheduling, coherency, failure quiescence, and measured performance | Require additional implementation/interface evidence or hardware validation |
 
 ## Path inventory
