@@ -1,6 +1,6 @@
 # 13 — Transparent encryption for D2rH and rH2D
 
-[Summary](README.md) · Previous: [D2rH/rH2D traffic](12_remote_host_memory_d2rh_rh2d.md)
+[Summary](README.md) · Previous: [D2rH/rH2D traffic](12_remote_host_memory_d2rh_rh2d.md) · Next: [HcommWriteOnThread over UB](14_hcomm_write_on_thread.md)
 
 Analysis date: 2026-10-13. **Status: source-backed design proposal, not an
 implemented or hardware-validated remote encryption feature.**

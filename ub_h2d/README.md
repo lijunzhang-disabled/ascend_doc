@@ -42,6 +42,11 @@ Document 13 proposes transparent D2rH/rH2D encryption using the existing
 local secure-copy implementation in `~/ub/runtime_enc` as a reference. It
 separates payload interception counts from resource/completion integration;
 the remote encryption feature is not implemented or hardware-validated.
+Document 14 traces `HcommWriteOnThread` through AICPU buffer lookup, UB
+WQEs, STARS doorbell tasks, batching, and completion bookkeeping.
+Document 15 traces `HcommWriteNbiOnThread` through host RoCE MR lookup,
+chunk/QP splitting, verbs posting, retries, and CQ polling. It distinguishes
+documented protocol support from the broader channel dispatch in the source.
 
 The visible tree includes host kernel code and shared/userspace implementations,
 including queue receiver logic. It does not contain a complete device-side
@@ -83,6 +88,8 @@ graph branch; service-specific and device-execution boundaries remain.
 | 11 | [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md) | What crosses host UB during a collective? How do AICPU/AIV resources and arguments, CCU instructions/TLV requests, and SQ submission differ from D2D payload movement? |
 | 12 | [D2rH/rH2D remote host-memory traffic](12_remote_host_memory_d2rh_rh2d.md) | How can an NPU offload to or restore from another server's RAM? How do endpoint selection, registration/mapping, local launch traffic, and completion differ from bulk payload? |
 | 13 | [Transparent remote-memory encryption](13_transparent_remote_memory_encryption.md) | How can D2rH/rH2D encryption preserve the application API? Which transfer entries and supporting resource/completion paths need integration? |
+| 14 | [HcommWriteOnThread over UB](14_hcomm_write_on_thread.md) | How do AICPU buffer lookup, Jetty WQEs, STARS doorbell SQEs, batching, and completion connect for one remote WRITE? |
+| 15 | [HcommWriteNbiOnThread over host RoCE](15_hcomm_write_nbi_on_thread.md) | How do host channel dispatch, MR keys, chunk/QP splitting, verbs posting, retries, and blocking CQ-based fences differ from the UB path? |
 
 Documents 01–05 have been expanded into deep dives. Document 01 covers
 transport setup, registration, mappings, and teardown. Document 02 traces
@@ -129,6 +136,7 @@ not mean the device protocol has been validated on hardware.
 | Legacy TDT and service-specific HDC/device application behavior | Remaining source follow-up |
 | HCCL/HCOMM collective H2D traffic | Selected AICPU/AIV/CCU resource, argument, instruction, and launch paths covered in 11; full bootstrap, graph/MC2 lifecycle, external CCU backend, and measurements remain |
 | D2rH/rH2D across servers / OS domains | Selected HIXL UB endpoint and mapped-host arrangements, device batch execution, and local completion traffic covered in 12; actual route, provider details, and hardware measurements remain |
+| HCOMM scalar WRITE execution | Selected AICPU UB path covered in 14 and host RoCE NBI path in 15; documented support, additional host URMA source dispatch, retry behavior, and backend-specific fences distinguished |
 | Device scheduling, coherency, failure quiescence, and measured performance | Require additional implementation/interface evidence or hardware validation |
 
 ## Path inventory
