@@ -1,6 +1,6 @@
 # 12 — D2rH and rH2D: remote host-memory traffic over UB
 
-[Summary](README.md) · Previous: [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md)
+[Summary](README.md) · Previous: [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md) · Next: [Transparent remote-memory encryption](13_transparent_remote_memory_encryption.md)
 
 Analysis date: 2026-10-11. The main source is HIXL commit
 `49bd2a256b728544c1e12df555c545670f9ab51a`, inspected in the earlier HIXL

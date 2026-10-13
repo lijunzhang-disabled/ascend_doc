@@ -1,6 +1,6 @@
 # Host-to-device paths over UB: summary and reading guide
 
-Analysis dates: 2026-09-14–2026-10-11. Sources: the sibling `driver` checkout
+Analysis dates: 2026-09-14–2026-10-13. Sources: the sibling `driver` checkout
 at `866e409` and, for documents 06–10, `runtime` at `216912472`, clean during
 their source traces. These notes describe source snapshots, rather than
 measured behavior on a running device.
@@ -38,6 +38,10 @@ cross-server D2D collectives from explicit HIXL remote-host-memory transfers.
 Document 12 follows D2rH/rH2D using HIXL at `49bd2a256b728544c1e12df555c545670f9ab51a`:
 Host UB endpoints, mapped host memory, device execution, and completion traffic.
 Its HIXL references use pinned upstream links rather than a sibling checkout.
+Document 13 proposes transparent D2rH/rH2D encryption using the existing
+local secure-copy implementation in `~/ub/runtime_enc` as a reference. It
+separates payload interception counts from resource/completion integration;
+the remote encryption feature is not implemented or hardware-validated.
 
 The visible tree includes host kernel code and shared/userspace implementations,
 including queue receiver logic. It does not contain a complete device-side
@@ -78,6 +82,7 @@ graph branch; service-specific and device-execution boundaries remain.
 | 10 | [Batch correctness review](10_batch_correctness_review.md) | Which continuation concerns are confirmed by the source contracts? How does empty preparation affect CI ownership? What must a corrective patch and its tests establish? |
 | 11 | [HCCL/HCOMM collective traffic](11_hccl_hcomm_collective_traffic.md) | What crosses host UB during a collective? How do AICPU/AIV resources and arguments, CCU instructions/TLV requests, and SQ submission differ from D2D payload movement? |
 | 12 | [D2rH/rH2D remote host-memory traffic](12_remote_host_memory_d2rh_rh2d.md) | How can an NPU offload to or restore from another server's RAM? How do endpoint selection, registration/mapping, local launch traffic, and completion differ from bulk payload? |
+| 13 | [Transparent remote-memory encryption](13_transparent_remote_memory_encryption.md) | How can D2rH/rH2D encryption preserve the application API? Which transfer entries and supporting resource/completion paths need integration? |
 
 Documents 01–05 have been expanded into deep dives. Document 01 covers
 transport setup, registration, mappings, and teardown. Document 02 traces
