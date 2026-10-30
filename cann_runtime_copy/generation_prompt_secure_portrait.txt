@@ -1,0 +1,90 @@
+Generated with built-in image_gen, using cann_runtime_memcpy_stars_urma_v2.png as a style/edit reference. Portrait layout requested for right half of PPT.
+
+Use case: infographic-diagram.
+Create a REVISED version of the supplied Chinese CANN Runtime infographic, transforming it into a PORTRAIT diagram for the RIGHT HALF of a PowerPoint slide. Portrait aspect ratio 4:5, ideally 1600 px wide by 2000 px high. The source image is a STYLE reference only: keep pure white background, clean navy Chinese sans-serif typography, restrained blue and teal, thin crisp lines and rounded rectangles. Completely reflow the content vertically and replace the original plain-copy explanation with the verified encrypted-copy implementation below. Large readable text, spacious hierarchy, narrow-column friendly. No photo, no 3D, no logos, no decorative security shields, no watermark. Do not retain the previous landscape layout. One coherent finished diagram, not a mockup of a PPT.
+
+Important factual change: in the current runtime_enc iter-014 secure route, BOTH synchronous and asynchronous API calls use SecureDma. Ciphertext transfer is performed by Host workers through Driver::MemCopySync (UB driver/URMA); STARS schedules ValueWait plus the AICPU SecureDma crypto operator. The original raw async-copy ASYNCDMA/WQE diagram does NOT represent the encrypted data path. Show this real implementation, not crypto boxes pasted onto an old DMA path. No WQE detail is needed in this version.
+
+TOP, centered large title:
+"加密拷贝：同步与异步"
+Subtitle:
+"CANN Runtime · Ascend 950 / UB"
+Small scope line:
+"runtime_enc · iter-014 · 加密路径启用时"
+
+SECTION 1: Two compact equal cards SIDE BY SIDE (only this small top section is side-by-side):
+Left blue header "同步接口", API "aclrtMemcpy", body "整条加密链完成后返回"
+Right teal header "异步接口", API "aclrtMemcpyAsync", body on two short lines "提交后返回" and "流同步等待整条链完成"
+Thin arrows from both cards converge downward to a single shared strip:
+"共同进入 SecureDma"
+Next short line below it:
+"Host worker 负责主机处理与密文搬运"
+
+SECTION 2: A compact shared CONTROL FLOW box, heading "设备流上的控制路径"
+Inside, use a short clean flow arranged to fit portrait width:
+"Runtime 提交 SQE" → "STARS 按流调度"
+then downward to an ordered two-task sequence:
+"ValueWait(READY)" → "AICPU SecureDma"
+Small note under that sequence:
+"STARS 调度任务，AICPU 执行加解密"
+This is control flow; do not draw ciphertext moving through STARS. Use dark navy/teal outlines and modest pale background.
+
+SECTION 3: A larger blue-accent card, heading "H2D：Host 加密，Device 解密"
+Three clearly stacked numbered steps joined by downward arrows:
+1. Host row, label "Host 侧", content:
+"业务明文 → Host worker 加密 → 密文缓冲"
+Highlight the encryption operation in purple.
+2. Transfer row, label "UB 传输", content:
+"驱动 MemCopySync → URMA → Device 密文缓冲"
+Highlight transfer in amber.
+Small note aligned just below this row:
+"密文搬运完成后发布 READY"
+3. Device row, label "Device 侧", content:
+"ValueWait 放行 → AICPU 解密 → 业务明文"
+Highlight decryption in purple.
+Small completion badge at end: "设备解密完成"
+
+SECTION 4: A larger teal-accent card, heading "D2H：Device 加密，Host 解密"
+Three clearly stacked numbered steps joined by downward arrows:
+1. Device row, label "Device 侧", content:
+"业务明文 → AICPU 加密 → 密文缓冲"
+Highlight encryption in purple.
+2. Transfer row, label "UB 传输", content:
+"设备加密完成 → 驱动 / URMA → Host 密文缓冲"
+Highlight transfer in amber.
+3. Host row, label "Host 侧", content:
+"Host worker 解密 → 业务明文"
+Highlight decryption in purple.
+Small completion badge at end: "Host 解密完成"
+
+BOTTOM: a simple prominent takeaway band, two lines:
+"链路搬运密文；端侧处理明文"
+"完成语义覆盖：加密 + 搬运 + 解密"
+
+Tiny but readable footer:
+"当前算法：AES-256-CTR"
+"小拷贝整帧处理；大拷贝按片流水执行。"
+
+Typography/layout priorities: This will be inserted at half slide width, so avoid dense tiny code and paragraph notes. Maintain generous outer margins and distinctly separated sections. All text must stay within frame. Keep big title, API names and H2D/D2H headings extremely legible. Use text and functional arrows, not excess artwork. Steps can wrap naturally into two lines if needed. Don't squeeze a long process into illegibly small labels; use vertical space. Control and data flow must be visually distinguishable. Host is blue, Device teal, cryptographic operations purple, data transport amber.
+
+Accuracy: Host worker is separate from calling application thread, so the asynchronous API can return even though the worker uses blocking driver copy. Current code uses AES-256-CTR, NOT AES-GCM, AEAD or authenticated encryption; do not add authentication/MAC/tag claims. H2D encrypts on Host, transfers ciphertext, publishes READY, AICPU decrypts. D2H runs AICPU encryption before transferring ciphertext to Host, then Host decrypts. The stream synchronization in this implementation includes Host completion bookkeeping so D2H completion covers Host decryption. Diagram is for secure-enabled iter-014, not every stock CANN code path. STARS is a scheduler and AICPU is the crypto execution unit. Actual UB transport is launched through Host driver in both secure API modes. Keep this accurate and present it simply.
+
+Source snapshot read-only:
+/home/zlj/ub/runtime_enc/AscendCCv2-Runtime branch iter-014, HEAD 9b9efba50
+/home/zlj/ub/runtime_enc/AscendCCv2-AICPU branch iter-014, HEAD 7fd3986
+
+Verified sources (under those repositories):
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_route.cc:147 TryRouteSync; AsyncCopyRoute also routes enabled H2D/D2H through Engine.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_engine.cc:137 Engine::Copy shares implementation between sync/async, sync waits before and after. Large copies use the same semantic split.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_whole_copy.cc:159 StepLocked encrypts H2D, transfers ciphertext with RuntimeTransport, publishes READY; D2H waits for device completion, transfers ciphertext to Host, decrypts.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_whole_copy.cc:294 WholeCopyQueue::Copy submits ValueWait then AICPU operator.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_memory.cc:15 ToDevice and FromDevice both invoke Driver::MemCopySync.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_runtime.cc:133 SubmitOperator dispatches SecureDma as an AICPU kernel.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_aes_ctr.cc:11 Host AES-256-CTR via OpenSSL.
+Runtime/src/runtime/core/src/memory/secure_dma/secure_dma_large_copy.cc:80 per-slice ValueWait+operator; TransportStep also uses RuntimeTransport.
+Runtime/src/runtime/core/src/stream/stream.cc:1966 stream sync waits for HostCompletion.
+AICPU/ms_kernels/src/secure_dma/secure_dma_whole_copy_device.inc:48 RunRequest calls FrameUnseal for H2D and FrameSeal for D2H, then publishes completion.
+
+Notes:
+Current source takes precedence over iter-007 notes and older 820/801 design snapshots. Diagram depicts secure-enabled iter-014, not stock CANN raw memcpy. Ciphertext transport is Host-initiated driver copy for both API modes. STARS schedules the gate and AICPU crypto tasks. AES-256-CTR does not imply AEAD/MAC; no authentication claims are made. D2H end-to-end completion includes Host-side decryption. Small whole-frame and large pipelined copies share the depicted high-level flow.
+
