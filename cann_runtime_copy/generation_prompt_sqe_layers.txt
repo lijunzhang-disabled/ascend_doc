@@ -1,0 +1,33 @@
+Generated with built-in image_gen; edited cann_runtime_memcpy_stars_urma.png.
+
+Use case: text-localization / precise-object-edit.
+Edit the provided CANN Runtime Chinese infographic with a SMALL TARGETED CORRECTION. Keep its exact overall layout, aspect ratio, all other text, all arrows, colors, Host/Device division, synchronous left panel, two bottom timing bars, and white-background professional flat style unchanged. Do not redesign it.
+
+Change ONLY the right panel's middle Host Runtime box and add a single small technical annotation next to its downward submission arrow:
+1. Replace the THREE existing lines in that box:
+"Runtime 组装拷贝任务"
+"准备 SQE / WQE"
+"驱动协助准备内存与 WQE"
+with exactly TWO well-spaced readable lines:
+"Runtime 构造拷贝 SQE"
+"提交至 STARS Stream SQ"
+
+2. Keep the downward arrow from this box to STARS. Change its existing caption "下发至 Stream SQ" to "下发 SQE".
+Below that caption, in available white space beside the arrow and ABOVE the Host/Device dashed boundary, add a small two-line note:
+"UB DIRECT_WQE 模式："
+"后续 SQ 槽位携带 WQE"
+Do not overlap this note with the arrow or the boundary. Adjust the note's position within existing free space without moving or changing the main architecture.
+
+3. In the right lower Device UB transfer engine box, retain its first line "UB 传输引擎", and change its second line from "执行数据搬运" to "消费 WQE，执行数据搬运". Leave the left UB engine box exactly unchanged.
+
+Technical intent: SQE is the STARS scheduling layer's submission entry; WQE belongs to the UB transport layer. They are not two parallel types of work independently submitted to STARS. In the current Ascend 950 normal UB copy DIRECT_WQE mode, Runtime constructs an ASYNCDMA SQE and places the driver-created WQE in the following STARS SQ slot. This note accurately preserves that distinction. The actual data movement is by UB hardware after STARS schedules/triggers it. No general claim that all asynchronous copies involve WQE. Existing Ascend 950 UB scope remains unchanged. Do not add any of this explanatory English prose to the image.
+
+Preserve the early Host return callout "提交后返回 / Host 可继续工作" and all existing timing, title, footer, and summary content. Maintain crisp Simplified Chinese typography and accurate letter-by-letter API names. Keep other content exactly unchanged.
+
+Source evidence:
+runtime/src/runtime/driver/npu_driver_standard_soc.cc:23 CreateAsyncDmaWqe calls halAsyncDmaCreate and receives WQE data.
+runtime/src/runtime/core/src/task/task_info/memory/memory_task_v200_base.cc:769 HandleUbModeDmaResult stores the returned WQE.
+runtime/src/runtime/core/src/task/task_info/memory/memory_task_v200.cc:78 ConstructDavidAsyncDmaSqe uses RT_DAVID_SQE_TYPE_ASYNCDMA and RT_DAVID_SQE_DIRECTWQE_MODE; copies ubDma.wqe into command + 1 (or next SQ slot).
+
+Interpretation: STARS submission is an SQE task. In UB DIRECT_WQE mode the WQE payload is included in subsequent SQ storage. WQE is a UB transport work item, not a separate peer to SQE at the Runtime-to-STARS API layer, and is not exclusive to host-initiated synchronous URMA transfers.
+
