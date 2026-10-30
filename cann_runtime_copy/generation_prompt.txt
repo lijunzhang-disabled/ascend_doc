@@ -1,0 +1,55 @@
+Generated with built-in image_gen.
+
+Use case: infographic-diagram.
+Create ONE finished high-resolution Chinese technical diagram for direct placement on a PowerPoint slide, exact widescreen 16:9 composition, ideally 2560x1440. It must be an exceptionally clean flat vector-style educational infographic on pure white, with dark navy typography, cobalt blue for synchronous copy, teal for asynchronous copy, muted amber for waiting. Generous margins, crisp straight lines, readable Simplified Chinese sans serif text, polished professional engineering presentation. No decorative robots, photos, 3D, logos, watermark, or unnecessary art. This is a diagram, not a photograph of a slide.
+
+Title: "CANN Runtime：同步拷贝与异步拷贝"
+Subtitle: "C/C++ 接口 · Host ↔ Device · 典型锁页内存场景"
+Small key takeaway under title: "看返回时机，也看数据何时可用"
+
+Two equal large panels side by side, synchronous blue on left, asynchronous teal on right.
+LEFT panel:
+Header: "同步拷贝"
+API text verbatim, monospace on a pale blue strip:
+"aclrtMemcpy(dst, cap, src, bytes, kind)"
+Below API, draw a true aligned two-lane horizontal time diagram. Time progresses left to right. Label lanes "Host" and "Device".
+Host lane has a long amber waiting block from t0 to t3 labeled "调用并等待"; at its right edge t3 mark a dot "返回"; after that a short blue block labeled "后续工作".
+Device lane has a blue block from just after t0 to just before t3 labeled "数据拷贝", ends in a completion check. A vertical dashed guide connects completion to the Host return boundary, showing that the copy finishes before return.
+Thin time arrow beneath labelled "时间 →".
+Bold short takeaway: "成功返回 → 本次拷贝已完成"
+Small second line: "主机线程等待，之后继续执行"
+
+RIGHT panel:
+Header: "异步拷贝"
+API text verbatim in monospace on a pale teal strip, wrapped at comma for readability:
+"aclrtMemcpyAsync(dst, cap, src, bytes,"
+"                 kind, stream)"
+Below API draw another aligned two-lane timeline. Label lanes "Host" and "Stream". Host lane: small teal block at t0-t1 labeled "提交", a clear marked return dot at t1 labeled "返回", then wide pale teal block t1-t3 labeled "其他工作", then amber block t3-t4 labeled "同步等待", then small teal continuation with check at t4. Device Stream lane: gray block t0-t2 labeled "前序任务", then teal block t2-t4 labeled "数据拷贝", ending at t4 with completion check. Dashed vertical guide at t1 must show API returns BEFORE copy completes. Dashed vertical guide at t4 connects copy completion to end of Host synchronize wait. Submission return is not copy completion. Host other work visibly overlaps with Device stream execution.
+Thin time arrow beneath labelled "时间 →".
+Bold short takeaway: "成功返回 → 任务已提交"
+Small second line, verbatim: "aclrtSynchronizeStream(stream) 等待完成"
+
+Below the two timelines use a single prominent pale tinted banner:
+"异步的价值：让主机工作与数据传输重叠；需要结果时再等待"
+
+Bottom section has THREE compact, well-separated practical notes with small numbered circles, minimal text:
+1 heading "同步范围"
+body "aclrtMemcpy 不隐式同步 Device / Stream"
+2 heading "内存条件"
+body on two lines "Host 锁页内存：aclrtMallocHost"
+"非锁页内存：拷贝完成后才返回"
+3 heading "使用约束"
+body on two lines "同一 Stream 内任务按序执行"
+"完成前勿释放缓冲区或修改源数据"
+
+Small final footer: "示意图不代表实际耗时比例；以目标 CANN 版本与产品支持为准。"
+
+Accuracy: Only Host is a CPU lane. A stream is an ordered task queue on the device, not a CPU. Do not claim asynchronous API always immediately returns, universal GPU concurrency, or no synchronization. Show left return after copy and right submit return earlier than copy completion. Note the displayed async scenario uses pinned Host memory. Return success is distinct from eventual execution success. Preserve exact Latin API spellings and Chinese text. Design text to be large enough at slide size; hierarchy and clear time semantics are more important than density. All timeline lanes have consistent vertical alignment and no text overlap.
+
+Technical references:
+https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/910/API/runtimeapi/aclcppdevg_03_0105.html
+https://www.hiascend.com/doc_center/source/zh/CANNCommunityEdition/910/API/runtimeapi/aclcppdevg_03_0106.html
+
+Local reference:
+runtime/docs/zh/api_ref/11-03_memory_copy_and_set.md
+
