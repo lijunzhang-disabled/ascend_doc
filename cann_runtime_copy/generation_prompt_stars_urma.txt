@@ -1,0 +1,67 @@
+Generated with built-in image_gen, editing cann_runtime_memcpy_comparison.png.
+
+Use case: infographic-diagram.
+Edit the supplied Chinese CANN Runtime infographic into a revised PPT-ready architectural comparison. Keep its clean white background, dark navy Chinese sans-serif typography, blue synchronous versus teal asynchronous palette, and professional readable flat vector style. Rebuild the layout to ADD the real host-driver URMA path and device STARS scheduling path as the MAIN content, while retaining a smaller timing comparison at the bottom. Wide 16:9 composition, ideally 2560x1440. No photo, no 3D, no logos, no watermark. Typography, correct arrows, and technical accuracy are paramount.
+
+Title exact: "CANN Runtime：同步 / 异步拷贝的执行路径"
+Subtitle exact: "Ascend 950 · UB 互连 · Host ↔ Device"
+Small scope text exact: "异步路径以锁页 / 已注册 Host 内存为前提"
+
+Two balanced side-by-side panels, left blue and right teal. Each panel has a light upper "Host 侧" zone and a faintly tinted lower "Device 侧" zone with a clear horizontal dashed Host/Device boundary. Host and Device labels placed at the zones' left margin. The two zones must be vertically aligned across both panels. Architecture flows downward from Host to Device. Do not position STARS in Host.
+
+LEFT PANEL heading: "同步拷贝：Host 发起并等待"
+Host side:
+top compact API box containing "aclrtMemcpy(...)" with small second line "Runtime：rtMemcpy"
+solid down arrow to a larger box "Host 驱动 · HAL / SVM"
+next solid down arrow to a box "URMA 提交传输请求" with smaller text "urma_post_jfs_wr"
+This is the actual transfer launch performed on the Host side. The driver and URMA are on Host.
+Solid blue down arrow crosses Host/Device boundary, labelled "Host 发起搬运", into Device side box "UB 传输引擎" with a second line "执行数据搬运".
+A dashed blue completion arrow travels upwards along the right side from UB engine back to Host driver, labelled "完成通知".
+A clearly readable amber callout inside the Host zone next to the driver says "等待传输完成后返回". Host application is blocked during the entire transfer.
+Below device box small blue conclusion text "驱动掌握发起与完成等待".
+Do not put STARS anywhere in this left path; do not call URMA hardware; the UB transfer engine moves data.
+
+RIGHT PANEL heading: "异步拷贝：STARS 按流调度"
+Host side:
+top compact API box containing "aclrtMemcpyAsync(..., stream)" and smaller second line "Runtime：rtMemcpyAsync"
+solid down arrow to a larger box "Runtime 组装拷贝任务"
+inside that larger box two smaller text lines:
+"准备 SQE / WQE"
+"驱动协助准备内存与 WQE"
+A teal side branch near this box goes to a compact callout "提交后返回" and "Host 可继续工作"; the return branch represents API returning after task submission, before transfer completes.
+Solid teal down arrow crossing boundary labelled "下发至 Stream SQ".
+Device side:
+box "STARS 调度器" with smaller text "按 Stream 顺序调度拷贝任务"
+solid teal down arrow labeled "触发传输"
+box "UB 传输引擎" with smaller text "执行数据搬运"
+A small dashed feedback line from engine to STARS marked "完成反馈".
+Below the device boxes small teal conclusion text "STARS 掌握任务调度与传输触发".
+STARS is a scheduler; UB transfer engine executes the actual movement. Do not draw an AI Core or computing kernel. This copy is a DMA task/SQE, not a compute operator running on STARS.
+
+BOTTOM below architecture panels: a thin compact pair of horizontal timing bars aligned side by side.
+Left label "Host 时间线", bar sequence amber long "调用 + 等待拷贝" then a blue return marker labeled "返回" then pale blue "后续工作". Caption below exact "成功返回 = 本次拷贝完成".
+Right label "Host 时间线", bar sequence short teal "提交" then a distinct marker "返回" then long pale teal "其他工作" then amber "同步等待". Caption below exact "提交成功后返回；aclrtSynchronizeStream 等待完成".
+Make small arrow indicating time moving right. No need for device lane in these bottom mini timelines; architecture above is the focus.
+
+At very bottom a single concise takeaway strip:
+"核心区别：同步由 Host 驱动发起并等待；异步由 STARS 按 Stream 顺序触发执行"
+
+Tiny but readable footer:
+"URMA 对应本图的 UB 路径；PCIe 路径实现不同。非锁页 Host 内存可能转为同步执行。"
+
+Accuracy constraints: Scope is Ascend 950 UB H2D/D2H. Do not generalize URMA to all CANN platforms. Both APIs call Host Runtime. The synchronous path enters host driver SVM/HAL and posts URMA work, waits for completion, returns. The asynchronous path prepares a stream copy task with SQE/WQE with driver help and sends it to STARS, returns after submission; STARS schedules the task and triggers actual hardware transport. Both ultimately use UB data transfer hardware. No implication that URMA itself copies bytes on CPU. Do not label the normal 1D UB memcpy SQE specifically UBDMA: current code commonly uses ASYNCDMA direct WQE, while other cases use UBDMA doorbell. Use generic SQE/WQE as specified. All Chinese text and API spellings must be exact. Keep text uncluttered and at a presentation-readable size. Preserve the original infographic's visual language but enlarge the architectural content.
+
+Verified local sources:
+- runtime/src/acl/aclrt_impl/memory.cpp:647 (ACL to Runtime entry points)
+- runtime/src/runtime/api/impl/api_impl.cc:2762 (synchronous path to driver)
+- runtime/src/runtime/driver/npu_driver_mem.cc:2150 (HAL/driver memory copy adapter)
+- driver/src/ascend_hal/svm/v3/op/ub_adapt/svm_ub_memcpy.c:165 (URMA submission followed by wait)
+- driver/src/ascend_hal/svm/v3/urma_adapt/urma_jetty/svm_urma_jetty.c:320 (urma_post_jfs_wr)
+- driver/src/ascend_hal/svm/v3/urma_adapt/urma_jetty/svm_urma_jetty.c:355 (completion wait and poll)
+- runtime/src/runtime/core/src/launch/memcpy_starsv2.cc:209 (stream copy task construction and DavidSendTask)
+- runtime/src/runtime/core/src/task/task_info/memory/memory_task_v200.cc:80 (ASYNCDMA direct WQE)
+- runtime/src/runtime/core/src/task/task_info/memory/memory_task_v200.cc:170 (UB/PCIe/D2D SQE selection)
+
+Scope:
+Ascend 950, UB-connected Host/Device; true asynchronous copy uses pinned/registered Host memory. URMA is not a universal backend for all CANN memory copies. The normal 1D UB copy may use ASYNCDMA with direct WQE; other UB modes use a UBDMA doorbell SQE. STARS schedules the task and triggers transfer; the UB transfer hardware moves bytes.
+
